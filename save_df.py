@@ -11,8 +11,8 @@ from nltk import word_tokenize
 
 
 settings = {
-'max_comment': 650,
-'max_title': 275
+'max_comment': 2500,
+'max_title': 500
 }
 
 # initialize/create local database
@@ -100,6 +100,7 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
             data = {}
 
             for row in rows:
+                #return dict of a single title & comment sentence
                 filtered = length_filter(row[0], row[1])
                 if filtered:
                     titles.append(filtered['title'])
@@ -108,24 +109,31 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
                     asins.append(row[2])
                     ratings.append(row[3])
 
+            # Add lists to data dict
             data['title'] = titles
             data['comment'] = comments
             data['asin'] = asins
             data['rating'] = ratings
 
-            # Save file and set new offset/count
-            save_df(file_name, data, count)
-            count += 1
-            data = {}
-            que_offset += batch
-            set_count(count)
-            set_offset(que_offset)
+            # Save file, count, 
+            try:
+                # Save file, increase count, save count/offset to local DB
+                save_df(file_name, data, count)
+                count += 1
+                data = {}
+                que_offset += batch
+                set_count(count)
+                set_offset(que_offset)
 
-            # Print current batch info
-            print('{batch} lines added to {file_name}.csv'.format(batch=batch, file_name=file_name))            
+                # Print current batch info
+                print('{batch} lines added to {file_name}.csv'.format(batch=batch, file_name=file_name))   
+
+            except Exception as error:
+                print('saving and setting error: ', error)         
 
     except (Exception, psycopg2.DatabaseError) as error:
-        print(error)
+        print('get_data() postgres error: ', error)
+        pass
 
     finally:
         if conn is not None:
@@ -145,7 +153,7 @@ def get_offset():
     with lconn:
         lcur.execute("SELECT setting_value FROM sample_gen_settings WHERE setting_name='offset'")
         offset_value = lcur.fetchone()
-        return offset_value[0]
+        return int(offset_value[0])
 
 
 def set_offset(offset_value):
@@ -158,7 +166,7 @@ def get_count():
     with lconn:
         lcur.execute("SELECT setting_value FROM sample_gen_settings WHERE setting_name='count'")
         count = lcur.fetchone()
-        return count[0]
+        return int(count[0])
 
 
 def set_count(count):
@@ -187,4 +195,4 @@ if __name__ == "__main__":
     #reset()
     # run with defaults
     # Default: gather_reviews(name, amount=1000, batch=5000, get_all=True)
-    get_data(file_name='reviews', amount=200000, batch=50000, get_all=False)
+    get_data(file_name='reviews', batch=50000, get_all=True)
