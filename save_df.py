@@ -1,3 +1,9 @@
+#!/usr/bin/python
+# -*- coding: UTF-8 -*-
+
+# Dataframe Chunk Writer
+# Author: Ryan Stefan
+
 import psycopg2
 import json
 import pandas as pd
@@ -53,7 +59,7 @@ def length_filter(title, comment):
         data['comment'] = ' '.join(comment)
         return data
 
-
+# Needs work (inactive)
 def rare_word_filter(title, comment):
     rand_text = nltk.word_tokenize("They I'm peres ewofij ryan refuse to,  permit us to obtain the refuse permit!")
     english_vocab = set(w.lower() for w in nltk.corpus.words.words())
@@ -89,31 +95,45 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
         print('queoffset = {}'.format(que_offset))
 
         while que_offset <= amount:
-            cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews LIMIT %s OFFSET %s", (batch, que_offset))
-            rows = cur.fetchall()
+            try:
+                cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews LIMIT %s OFFSET %s", (batch, que_offset))
+                rows = cur.fetchall()
 
-            titles = []
-            comments = []
-            asins = []
-            ratings = []
+                titles = []
+                comments = []
+                asins = []
+                ratings = []
 
-            data = {}
+                data = {}
+            except Exception as ex:
+                print('DB Error ', ex)
+                pass
 
             for row in rows:
                 #return dict of a single title & comment sentence
-                filtered = length_filter(row[0], row[1])
-                if filtered:
-                    titles.append(filtered['title'])
-                    comments.append(filtered['comment'])
+                try:
+                    filtered = length_filter(row[0], row[1])
+                    if filtered:
+                        titles.append(filtered['title'])
+                        comments.append(filtered['comment'])
 
-                    asins.append(row[2])
-                    ratings.append(row[3])
+                        asins.append(row[2])
+                        ratings.append(row[3])
+                        
+                except Exception as ex:
+                    print('Length filter / appending Error ', ex)
+                    pass
 
-            # Add lists to data dict
-            data['title'] = titles
-            data['comment'] = comments
-            data['asin'] = asins
-            data['rating'] = ratings
+            try:
+                # Add lists to data dict
+                data['title'] = titles
+                data['comment'] = comments
+                data['asin'] = asins
+                data['rating'] = ratings
+
+            except Exception as ex:
+                print('Adding lists to dict Error ', ex)
+                pass
 
             # Save file, count, 
             try:
