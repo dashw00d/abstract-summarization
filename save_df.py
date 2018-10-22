@@ -122,7 +122,7 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
             set_offset(que_offset)
 
             # Print current batch info
-            print('{batch} lines added to review-titles-{count}.txt & review-comments-{count}.txt'.format(batch=batch, count=count))            
+            print('{batch} lines added to {file_name}.csv'.format(batch=batch, count=file_name))            
 
     except (Exception, psycopg2.DatabaseError) as error:
         print(error)
@@ -133,8 +133,8 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
 
 
 def save_df(file_name, data, count):
-    if int(count) == 1:
-        df = pd.DataFrame(data, columns = ['title', 'comment', 'asin', 'rating'])
+    df = pd.DataFrame(data, columns = ['title', 'comment', 'asin', 'rating'])
+    if int(count) == 0:
         df.to_csv('{}.csv'.format(file_name))
     else:
         with open('{}.csv'.format(file_name), 'a') as f:
@@ -187,4 +187,4 @@ if __name__ == "__main__":
     #reset()
     # run with defaults
     # Default: gather_reviews(name, amount=1000, batch=5000, get_all=True)
-    gather_reviews(file_name='reviews', batch=50000, get_all=True)
+    get_data(file_name='reviews', amount=200000, batch=50000, get_all=False)
