@@ -122,7 +122,7 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
             set_offset(que_offset)
 
             # Print current batch info
-            print('{batch} lines added to {file_name}.csv'.format(batch=batch, count=file_name))            
+            print('{batch} lines added to {file_name}.csv'.format(batch=batch, file_name=file_name))            
 
     except (Exception, psycopg2.DatabaseError) as error:
         print(error)
