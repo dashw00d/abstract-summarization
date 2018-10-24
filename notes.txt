@@ -1,1 +1,9 @@
 Adding 50000 lines to reviews.csv - Batch #828
+
+git rm -r --cached .
+git add .
+git commit -m "Removing all files in .gitignore"
+
+pipenv lock -r > requirements.txt
+
+python -c "import nltk; nltk.download('punkt')"

@@ -13,6 +13,7 @@ nltk = "==3.2.5"
 "psycopg2" = "*"
 jupyter = "*"
 pandas = "*"
+sumy = "*"
 
 [requires]
 python_version = "3.6"

@@ -15,6 +15,7 @@ import nltk
 from nltk.tokenize import sent_tokenize
 from nltk import word_tokenize
 
+from data_sumy import lex_sum
 
 settings = {
 'max_comment': 2500,
@@ -75,7 +76,9 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
     count = int(get_count())
     try:
         if get_all:
-            cur.execute("SELECT COUNT(*) FROM reviews")
+            cur.execute("""
+                    SELECT COUNT(*) FROM reviews;
+                    """)
 
             amount = cur.fetchone()
             amount = int(amount[0])
@@ -97,8 +100,7 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
 
         while que_offset < amount:
             try:
-                cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews LIMIT {} OFFSET {}".\
-                    format(batch=batch, que_offset=que_offset))
+                cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews LIMIT %s OFFSET %s", (batch, que_offset))
                 rows = cur.fetchall()
 
                 titles = []
@@ -141,8 +143,7 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
             # Save file, count, 
             try:
                 # Print current batch info
-                print('Adding {batch} lines to {file_name}.csv - Batch #{count}'.\
-                    format(batch=batch, file_name=file_name, count=count)) 
+                print('Adding {batch} lines to {file_name}.csv - Batch #{count}'.format(batch=batch, file_name=file_name, count=count)) 
 
                 # Save file, increase count, save count/offset to local DB
                 save_df(file_name, data, count)
@@ -168,9 +169,9 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
 def save_df(file_name, data, count):
     df = pd.DataFrame(data, columns = ['title', 'text', 'asin', 'rating'])
     if int(count) == 1:
-        df.to_csv('{}.csv'.format(file_name))
+        df.to_csv('./generated/{}.csv'.format(file_name))
     else:
-        with open('{}.csv'.format(file_name), 'a') as f:
+        with open('./generated/{}.csv'.format(file_name), 'a') as f:
             df.to_csv(f, header=False)
 
 
@@ -205,14 +206,6 @@ def reset():
     folder = './sumdata/train/split'
     set_count(1)
     set_offset(0)
-    for the_file in os.listdir(folder):
-        file_path = os.path.join(folder, the_file)
-        try:
-            if os.path.isfile(file_path):
-                os.unlink(file_path)
-            #elif os.path.isdir(file_path): shutil.rmtree(file_path)
-        except Exception as e:
-            print(e)
     print('Database and files cleared.')
 
 
@@ -220,4 +213,5 @@ if __name__ == "__main__":
     reset()
     # run with defaults
     # Default: gather_reviews(name, amount=1000, batch=5000, get_all=True)
-    get_data(file_name='500k', amount=500000, batch=50000, get_all=False)
+    get_data(file_name='quick-test', amount=500, batch=100, get_all=False)
+    #print(lex_sum('this is a test. this is another test. How many tests do I need? I dont know, just keep testing', 2))
