@@ -57,7 +57,8 @@ def length_filter(title, comment):
         data = {}
         data['title'] = ' '.join(title)
         data['comment'] = ' '.join(comment)
-        return data
+        if len(data['title']) > 5 and len(data['comment']) > 30:
+            return data
 
 # Needs work (inactive)
 def rare_word_filter(title, comment):
@@ -74,19 +75,19 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
     count = int(get_count())
     try:
         if get_all:
-            cur.execute("""
-                    SELECT COUNT(*) FROM reviews;
-                    """)
+            cur.execute("SELECT COUNT(*) FROM reviews")
 
             amount = cur.fetchone()
-            amount = int(amount[0]) - (batch * count)
-            gen_message = 'Generating {} rows'.format(str(amount))
+            amount = int(amount[0])
+            amount_left = amount - (batch * 2 * count)
+            gen_message = 'Generating {} rows'.format(str(amount_left + batch))
         else:
-            gen_message = 'Generating {} rows'.format(str(amount))
+            amount_left = amount - (batch * count)
+            gen_message = 'Generating {} rows'.format(str(amount_left + batch))
 
         # Print current settings once
         print('-' * 15)
-        print('Total: ', amount)
+        print('Total Remaining: ', str(amount_left + batch))
         print('Batch Amount: ', batch)
         print('Starting Batch: ', count)        
         print('-' * 15)
@@ -94,9 +95,10 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
         print(gen_message)
         print('queoffset = {}'.format(que_offset))
 
-        while que_offset <= amount:
+        while que_offset < amount:
             try:
-                cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews LIMIT %s OFFSET %s", (batch, que_offset))
+                cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews LIMIT {} OFFSET {}".\
+                    format(batch=batch, que_offset=que_offset))
                 rows = cur.fetchall()
 
                 titles = []
@@ -105,6 +107,7 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
                 ratings = []
 
                 data = {}
+
             except Exception as ex:
                 print('DB Error ', ex)
                 pass
@@ -113,30 +116,34 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
                 #return dict of a single title & comment sentence
                 try:
                     filtered = length_filter(row[0], row[1])
-                    if filtered:
+                    if filtered['title'] and filtered['comment']:
                         titles.append(filtered['title'])
                         comments.append(filtered['comment'])
 
                         asins.append(row[2])
                         ratings.append(row[3])
-                        
+
                 except Exception as ex:
-                    print('Length filter / appending Error ', ex)
+                    # print('Length filter / appending Error: ', ex)
                     pass
 
             try:
                 # Add lists to data dict
                 data['title'] = titles
-                data['comment'] = comments
+                data['text'] = comments
                 data['asin'] = asins
                 data['rating'] = ratings
 
             except Exception as ex:
-                print('Adding lists to dict Error ', ex)
+                print('Adding lists to dict Error: ', ex)
                 pass
 
             # Save file, count, 
             try:
+                # Print current batch info
+                print('Adding {batch} lines to {file_name}.csv - Batch #{count}'.\
+                    format(batch=batch, file_name=file_name, count=count)) 
+
                 # Save file, increase count, save count/offset to local DB
                 save_df(file_name, data, count)
                 count += 1
@@ -145,11 +152,9 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
                 set_count(count)
                 set_offset(que_offset)
 
-                # Print current batch info
-                print('{batch} lines added to {file_name}.csv'.format(batch=batch, file_name=file_name))   
 
             except Exception as error:
-                print('saving and setting error: ', error)         
+                print('Saving and setting error: ', error)         
 
     except (Exception, psycopg2.DatabaseError) as error:
         print('get_data() postgres error: ', error)
@@ -161,8 +166,8 @@ def get_data(file_name, amount=1000, batch=5000, get_all=True):
 
 
 def save_df(file_name, data, count):
-    df = pd.DataFrame(data, columns = ['title', 'comment', 'asin', 'rating'])
-    if int(count) == 0:
+    df = pd.DataFrame(data, columns = ['title', 'text', 'asin', 'rating'])
+    if int(count) == 1:
         df.to_csv('{}.csv'.format(file_name))
     else:
         with open('{}.csv'.format(file_name), 'a') as f:
@@ -198,7 +203,7 @@ def set_count(count):
 def reset():
     import os, shutil
     folder = './sumdata/train/split'
-    set_count(0)
+    set_count(1)
     set_offset(0)
     for the_file in os.listdir(folder):
         file_path = os.path.join(folder, the_file)
@@ -212,7 +217,7 @@ def reset():
 
 
 if __name__ == "__main__":
-    #reset()
+    reset()
     # run with defaults
     # Default: gather_reviews(name, amount=1000, batch=5000, get_all=True)
-    get_data(file_name='reviews', batch=50000, get_all=True)
+    get_data(file_name='500k', amount=500000, batch=50000, get_all=False)
