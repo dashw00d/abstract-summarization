@@ -98,105 +98,98 @@ def sum_reviews(file_name, limit=1000, get_all=True, is_reset=False):
     if is_reset:
         reset()
     count = int(get_count())
-    try:
-        # if limit is 0 get all from DB
-        if not limit:
-            #count products instead of reviews
-            limit = count_products()
-            limit_left = limit - count
-            gen_message = 'Generating {} of {}'.\
-            format(str(limit_left), str(limit))
+
+    # if limit is 0 get all from DB
+    if not limit:
+        #count products instead of reviews
+        limit = count_products()
+        limit_left = limit - count
+        gen_message = 'Generating {} of {}'.\
+        format(str(limit_left), str(limit))
+    else:
+        limit_left = limit - count
+        gen_message = 'Generating {} of {}'.\
+        format(str(limit_left), str(limit))
+
+    # Print current settings once
+    print('Total Remaining: ', str(limit_left))     
+    print(gen_message)
+
+    asin_list = get_asins(limit)
+
+    for current_asin in asin_list:    
+
+        cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews WHERE asin='{}'".\
+            format(current_asin, rating))
+
+        rows = cur.fetchall()
+
+
+        print('Sum count: ', sum_count)
+
+        data = {}
+
+        
+            #return dict of a single title & comment sentence
+        for rate in range(1,6):
+            for row in rows:
+                titles = []
+                comments = []
+                if row[3] == rate:
+                    titles.append(row[0])
+                    comments.append(row[1])
+
+            
+            data['{}-title'.format(rate)] = 
+            data['{}-comment'.format(rate)]
+            data['asin']
+            
+
+
+
+
+            #filtered = length_filter(row[0], row[1])
+            if filtered['title'] and filtered['comment']:
+                titles.append(filtered['title'])
+                comments.append(filtered['comment'])
+
+                asins.append(row[2])
+                ratings.append(row[3])
+
+        if len(rows) > 3:
+            sum_count = math.floor(len(rows) / 10)
         else:
-            limit_left = limit - count
-            gen_message = 'Generating {} of {}'.\
-            format(str(limit_left), str(limit))
-
-        # Print current settings once
-        print('Total Remaining: ', str(limit_left))     
-        print(gen_message)
-
-        asin_list = get_asins(limit)
-        ratings = [1,2,3,4,5]
-
-        for current_asin in asin_list:    
-            for rating in ratings:
-                try:
-                    cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews WHERE asin='{}' AND review_rating='{}'".\
-                        format(current_asin, rating))
-
-                    rows = cur.fetchall()
-
-                    titles = []
-                    comments = []
-                    asins = []
-                    ratings = []
-                    if len(rows) > 3:
-                        sum_count = math.floor(len(rows) / 10)
-                    else:
-                        sum_count = 3
-
-                    print('Sum count: ', sum_count)
-
-                    data = {}
-
-                except Exception as ex:
-                    print('DB Error ', ex)
-                    pass
-
-                for row in rows:
-                    #return dict of a single title & comment sentence
-                    try:
-                        filtered = length_filter(row[0], row[1])
-                        if filtered['title'] and filtered['comment']:
-                            titles.append(filtered['title'])
-                            comments.append(filtered['comment'])
-
-                            asins.append(row[2])
-                            ratings.append(row[3])
-
-                    except Exception as ex:
-                        # print('Length filter / appending Error: ', ex)
-                        pass
-
-                try:
-                    # Add lists to data dict
-                    data['title'] = lex_sum(' '.join(titles), sum_count)
-                    data['text'] = lex_sum(' '.join(comments), sum_count)
-
-                    data['asin'] = asins
-                    data['rating'] = ratings
-
-                except Exception as ex:
-                    print('Adding lists to dict Error: ', ex)
-                    pass
-
-                # Save file, count, 
-                try:
-                    # Print current batch info
-                    print('Adding product: {asin} rating: {rating} summary to {file_name}.csv'.\
-                        format(file_name=file_name, count=count, asin=current_asin, rating=rating)) 
-
-                    # Save file, increase count, save count/offset to local DB
-                    #save_df(file_name, data, count)
-                    print(data['text'])
-                    
-                    data = {}
-
-                except Exception as error:
-                    print('Saving and setting error: ', error)  
-
-            count += 1
-            #set_count(count)
-            print(count)
+            sum_count = 3
 
 
-    except (Exception, psycopg2.DatabaseError) as error:
-        print('get_data() postgres error: ', error)
-        pass
+        # Add lists to data dict
+        data['title'] = lex_sum(' '.join(titles), sum_count)
+        data['text'] = lex_sum(' '.join(comments), sum_count)
 
-    finally:
-        if conn is not None:
-            conn.close()
+        data['asin'] = asins
+        data['rating'] = ratings
+
+
+
+        # Print current batch info
+        print('Adding product: {asin} rating: {rating} summary to {file_name}.csv'.\
+            format(file_name=file_name, count=count, asin=current_asin, rating=rating)) 
+
+        # Save file, increase count, save count/offset to local DB
+        #save_df(file_name, data, count)
+        print(data['text'])
+        
+        data = {}
+
+
+
+        count += 1
+        #set_count(count)
+        print(count)
+
+
+    if conn is not None:
+        conn.close()
 
 
 def get_data(file_name, limit=1000, batch=5000, get_all=True, is_reset=False):
