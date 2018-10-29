@@ -9,6 +9,7 @@ import json
 import pandas as pd
 import os.path
 import math
+import pprint
 
 import sqlite3
 
@@ -120,66 +121,62 @@ def sum_reviews(file_name, limit=1000, get_all=True, is_reset=False):
     for current_asin in asin_list:    
 
         cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews WHERE asin='{}'".\
-            format(current_asin, rating))
+            format(current_asin))
 
         rows = cur.fetchall()
 
-
-        print('Sum count: ', sum_count)
 
         data = {}
 
         
             #return dict of a single title & comment sentence
         for rate in range(1,6):
+            asin = None
+            titles = []
+            comments = []
             for row in rows:
-                titles = []
-                comments = []
+                if not asin:
+                    asin = row[2]
                 if row[3] == rate:
                     titles.append(row[0])
                     comments.append(row[1])
 
-            
-            data['{}-title'.format(rate)] = 
-            data['{}-comment'.format(rate)]
-            data['asin']
-            
+            if not titles:
+                print('None: ', rate, asin)
+            elif len(titles) > 3:
+                sum_count = math.floor(len(rows) / 10)
+            else:
+                sum_count = 3
 
+            if titles and comments:
+                data['{}-titles'.format(rate)] = lex_sum(' '.join(titles), sum_count)
+                data['{}-comments'.format(rate)] = lex_sum(' '.join(comments), sum_count)
+            else:
+                data['{}-titles'.format(rate)] = 'No data'
+                data['{}-comments'.format(rate)] = 'No data'
 
+            data['asin'] = asin
+            data['rating'] = rate
 
+        pprint.pprint(data)
 
-            #filtered = length_filter(row[0], row[1])
-            if filtered['title'] and filtered['comment']:
-                titles.append(filtered['title'])
-                comments.append(filtered['comment'])
-
-                asins.append(row[2])
-                ratings.append(row[3])
-
-        if len(rows) > 3:
-            sum_count = math.floor(len(rows) / 10)
-        else:
-            sum_count = 3
 
 
         # Add lists to data dict
-        data['title'] = lex_sum(' '.join(titles), sum_count)
-        data['text'] = lex_sum(' '.join(comments), sum_count)
+        #data['title'] = lex_sum(' '.join(titles), sum_count)
+        #data['text'] = lex_sum(' '.join(comments), sum_count)
 
-        data['asin'] = asins
-        data['rating'] = ratings
+        #data['asin'] = asins
+        #data['rating'] = ratings
 
 
 
         # Print current batch info
-        print('Adding product: {asin} rating: {rating} summary to {file_name}.csv'.\
-            format(file_name=file_name, count=count, asin=current_asin, rating=rating)) 
+        print('Adding product: {asin} Current: {count} summary to {file_name}.csv'.\
+            format(file_name=file_name, count=count, asin=current_asin)) 
 
         # Save file, increase count, save count/offset to local DB
         #save_df(file_name, data, count)
-        print(data['text'])
-        
-        data = {}
 
 
 
