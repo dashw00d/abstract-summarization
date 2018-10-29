@@ -9,7 +9,6 @@ import json
 import pandas as pd
 import os.path
 import math
-import pprint
 
 import sqlite3
 
@@ -19,16 +18,32 @@ from nltk import word_tokenize
 
 from data_sumy import lex_sum
 
-from settings import *
 
+settings = {
+'max_comment': 2500,
+'max_title': 500
+}
 
-def db_test(limit=10):
-    cur.execute("SELECT * FROM reviews LIMIT {limit}".\
-    format(limit=limit))
+def lconnect():
+    # initialize/create local database
+    sqlite_file = './db/make_samples.sqlite'
+    lconn = sqlite3.connect(sqlite_file)
+    lcur = lconn.cursor()
+    # lcur, lconn = lconnect()
+    # lcur.execute("SELECT COUNT(*) FROM reviews")
+    return lcur, lconn
 
-    rows = cur.fetchall()
-    for row in rows:
-        print(row)
+def connect():
+    with open('./config.json') as f:
+        config = json.load(f)  # returns a dictionary
+
+    conn = psycopg2.connect(**config)
+    # similar to psycopg2.connect(host="localhost",database="db", user="postgres", password="postgres")
+    cur = conn.cursor()
+    # cur, conn = connect()
+    # cur.execute("SELECT COUNT(*) FROM reviews")  
+    return cur, conn
+
 
 def sentence_trimmer(text, max_len):
     sentences = sent_tokenize(text)
@@ -67,27 +82,33 @@ def rare_word_filter(title, comment):
 
 
 def count_products():
+    cur, conn = connect()
     counts = {}
     cur.execute("SELECT COUNT(*) FROM products")
     limit = cur.fetchone()
+    conn.close()
     return int(limit[0])
 
 
 def count_reviews():
+    cur, conn = connect()
     cur.execute("SELECT COUNT(*) FROM reviews")
     limit = cur.fetchone()
+    conn.close()
     return int(limit[0])
 
 
 def get_asins(limit=0):
     if not limit:
         limit = count_products()
+    cur, conn = connect()
     cur.execute("SELECT asin FROM products LIMIT {limit}".\
         format(limit=limit))
     rows = cur.fetchall()
     asins = set()
     for row in rows:
         asins.add(row[0])
+    conn.close()
     return list(asins)
 
 
@@ -117,19 +138,20 @@ def sum_reviews(file_name, limit=1000, get_all=True, is_reset=False):
     print(gen_message)
 
     asin_list = get_asins(limit)
-
+    cur, conn = connect()
     for current_asin in asin_list:    
 
         cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews WHERE asin='{}'".\
             format(current_asin))
-
         rows = cur.fetchall()
 
-
         data = {}
+        sumtitle = []
+        sumtext = []
+        sumasin = []
+        sumrate = []
 
-        
-            #return dict of a single title & comment sentence
+        #return dict of a single title & comment sentence
         for rate in range(1,6):
             asin = None
             titles = []
@@ -149,41 +171,25 @@ def sum_reviews(file_name, limit=1000, get_all=True, is_reset=False):
                 sum_count = 3
 
             if titles and comments:
-                data['{}-titles'.format(rate)] = lex_sum(' '.join(titles), sum_count)
-                data['{}-comments'.format(rate)] = lex_sum(' '.join(comments), sum_count)
+                sumtitle.append(' '.join(lex_sum(' '.join(titles), sum_count)))
+                sumtext.append(' '.join(lex_sum(' '.join(comments), sum_count)))
+                sumasin.append(asin)
+                sumrate.append(rate)
+                # Print current batch info
+                print('Adding product: {asin} Current: {count} summary to {file_name}.csv'.\
+                    format(file_name=file_name, count=count, asin=current_asin)) 
+
             else:
-                data['{}-titles'.format(rate)] = 'No data'
-                data['{}-comments'.format(rate)] = 'No data'
+                print('Skipping: {} Rating {}'.format(current_asin, rate))
 
-            data['asin'] = asin
-            data['rating'] = rate
-
-        pprint.pprint(data)
-
-
-
-        # Add lists to data dict
-        #data['title'] = lex_sum(' '.join(titles), sum_count)
-        #data['text'] = lex_sum(' '.join(comments), sum_count)
-
-        #data['asin'] = asins
-        #data['rating'] = ratings
-
-
-
-        # Print current batch info
-        print('Adding product: {asin} Current: {count} summary to {file_name}.csv'.\
-            format(file_name=file_name, count=count, asin=current_asin)) 
+        data['title'] = sumtitle
+        data['text'] = sumtext
+        data['asin'] = sumasin
+        data['rating'] = sumrate
 
         # Save file, increase count, save count/offset to local DB
-        #save_df(file_name, data, count)
-
-
-
+        save_df(file_name, data, count)
         count += 1
-        #set_count(count)
-        print(count)
-
 
     if conn is not None:
         conn.close()
@@ -215,7 +221,7 @@ def get_data(file_name, limit=1000, batch=5000, get_all=True, is_reset=False):
         print(' ')
         print(gen_message)
         print('queoffset = {}'.format(que_offset))
-
+        cur, conn = connect()
         while que_offset < limit:
             try:
                 cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews LIMIT %s OFFSET %s", (batch, que_offset))
@@ -295,29 +301,33 @@ def save_df(file_name, data, count):
 
 
 def get_offset():
-    with lconn:
-        lcur.execute("SELECT setting_value FROM sample_gen_settings WHERE setting_name='offset'")
-        offset_value = lcur.fetchone()
-        return int(offset_value[0])
+    lcur, lconn = lconnect()
+    lcur.execute("SELECT setting_value FROM sample_gen_settings WHERE setting_name='offset'")
+    offset_value = lcur.fetchone()
+    lconn.close()
+    return int(offset_value[0])
 
 
 def set_offset(offset_value):
-    with lconn:
-        lcur.execute("UPDATE sample_gen_settings SET setting_value={offset_value} WHERE setting_name='offset'".\
-            format(offset_value=offset_value))
+    lcur, lconn = lconnect()
+    lcur.execute("UPDATE sample_gen_settings SET setting_value={offset_value} WHERE setting_name='offset'".\
+        format(offset_value=offset_value))
+    lconn.close()
 
 
 def get_count():
-    with lconn:
-        lcur.execute("SELECT setting_value FROM sample_gen_settings WHERE setting_name='count'")
-        count = lcur.fetchone()
-        return int(count[0])
+    lcur, lconn = lconnect()
+    lcur.execute("SELECT setting_value FROM sample_gen_settings WHERE setting_name='count'")
+    count = lcur.fetchone()
+    lconn.close()
+    return int(count[0])
 
 
 def set_count(count):
-    with lconn:
-        lcur.execute("UPDATE sample_gen_settings SET setting_value={count} WHERE setting_name='count'".\
-            format(count=count))
+    lcur, lconn = lconnect()
+    lcur.execute("UPDATE sample_gen_settings SET setting_value={count} WHERE setting_name='count'".\
+        format(count=count))
+    lconn.close()
 
 
 def reset():
@@ -329,7 +339,7 @@ def reset():
 
 
 if __name__ == "__main__":
-    #get_data(file_name='quick-test', limit=0, batch=100, is_reset=True) # limit 0 gets all
+    #get_data(file_name='quick-test-2', limit=0, batch=100, is_reset=True) # limit 0 gets all
     #print(lex_sum('this is a test. this is another test. How many tests do I need? I dont know, just keep testing', 2))
-    sum_reviews(file_name='quick-sum', limit=6, is_reset=True)
+    sum_reviews(file_name='quick-sum-test', limit=6, is_reset=True)
     #db_test(10)
