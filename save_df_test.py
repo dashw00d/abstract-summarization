@@ -170,9 +170,10 @@ def sum_reviews(file_name, limit=1000, get_all=True, is_reset=False):
             for row in rows:
                 if not asin:
                     asin = row[2]
-                if row[3] == rate and row[0] not in deftitles:
-                    titles.append(row[0])
+                if row[3] == rate:
                     comments.append(row[1])
+                    if row[0] not in deftitles:
+                        titles.append(row[0])
 
             if not comments:
                 print('None: ', rate, asin)
