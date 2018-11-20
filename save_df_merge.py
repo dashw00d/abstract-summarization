@@ -14,6 +14,7 @@ import os.path
 import math
 import time
 import functools
+import datetime
 
 import nltk
 from nltk.tokenize import sent_tokenize
@@ -96,6 +97,10 @@ def rare_word_filter(title, comment):
     return [x if x.lower() in english_vocab else '<UNK>' for x in rand_text]
 
 
+def word_pool(text):
+    pass
+
+
 def count_products():
     cur, conn = connect()
     counts = {}
@@ -165,9 +170,12 @@ def sum_reviews(file_name, limit=1000, get_all=True, is_reset=False):
     while redis_conn.scard('sum_ASINs') > 0:
         current_asin = redis_conn.spop('sum_ASINs').decode("utf-8")
 
-        cur.execute("SELECT review_title, review_body, asin, review_rating FROM reviews WHERE asin='{}'".
+        cur.execute("SELECT review_title, review_body, asin, review_rating, review_date, review_helpful, verified FROM reviews WHERE asin='{}'".
                     format(current_asin))
         rows = cur.fetchall()
+
+        # Data functions, append all dates (product meta) once for seperate meta df
+        review_meta(file_name, rows, count)
 
         # Temp Storage
         data = {}
@@ -185,6 +193,7 @@ def sum_reviews(file_name, limit=1000, get_all=True, is_reset=False):
             for row in rows:
                 if not asin:
                     asin = row[2]
+
                 if row[3] == rate:
                     comments.append(row[1])
                     if row[0].lower() not in deftitles:
@@ -213,7 +222,8 @@ def sum_reviews(file_name, limit=1000, get_all=True, is_reset=False):
                     sumrate.append(rate)
 
                     # Rake keywords
-                    rake = Rake(min_length=2, max_length=6, ranking_metric=Metric.DEGREE_TO_FREQUENCY_RATIO)
+                    rake = Rake(min_length=2, max_length=6,
+                                ranking_metric=Metric.DEGREE_TO_FREQUENCY_RATIO)
                     rake.extract_keywords_from_text(textjoin)
                     sumkeywords.append(' : '.join(rake.get_ranked_phrases()))
                 else:
@@ -260,14 +270,130 @@ def sum_reviews(file_name, limit=1000, get_all=True, is_reset=False):
         conn.close()
 
 
+def review_meta(file_name, rows, count):
+    data = {}
+    asin = None
+    dates = []
+    ratings = []
+    date_dict = {}
+    date_rev_avg = {}
+    day_list = {
+    "Monday": [],
+    "Tuesday": [],
+    "Wednesday": [],
+    "Thursday": [],
+    "Friday": [],
+    "Saturday": [],
+    "Sunday": []
+    }
+    days = []
+    helpful = []
+    verified = []
+    total_verified = 0
+    for row in rows:
+        if not asin:
+            asin = row[2]
+        dates.append(row[4])
+        ratings.append(row[3])
+        helpful.append(row[5])
+        verified.append(row[6])
+
+    # Calculate percent verified
+    for item in verified:
+        if str(item) == 'True':
+            total_verified += 1
+    if verified:
+        percent = round(total_verified / len(verified) * 100, 1)
+    else:
+        percent = 'No Data'
+    print('Percent Verified', '{}%'.format(str(percent)))
+
+    # count comments for dates / store ratings for dates in list
+    for date, rating in zip(dates, ratings):
+        #days.append(date_day(date))
+        # build dict with date as key and count as value
+        date_dict[date] = dates.count(date)
+        if date in date_rev_avg:
+            date_rev_avg[date].append(rating)
+        else:
+            date_rev_avg[date] = [rating]
+    # daylist gen
+    for date in set(dates):
+        day_list[date_day(date)].append(date_dict[date])
+
+    # Create lists for DF
+    df_dates = []
+    df_counts = []
+    df_ratings = []
+    df_mon = []
+    df_tue = []
+    df_wed = []
+    df_thu = []
+    df_fri = []
+    df_sat = []
+    df_sun = []
+    df_percent = []
+    df_help = []
+    df_asin = []
+    df_percent.append(str(percent))
+    df_help.append(helpful)
+    df_asin.append(asin)
+    for key in date_dict:
+        df_dates.append(str(key))
+        df_counts.append(date_dict[key])
+        df_ratings.append(date_rev_avg[key])
+
+    df_mon.append(day_list['Monday'])
+    df_tue.append(day_list['Tuesday'])
+    df_wed.append(day_list['Wednesday'])
+    df_thu.append(day_list['Thursday'])
+    df_fri.append(day_list['Friday'])
+    df_sat.append(day_list['Saturday'])
+    df_sun.append(day_list['Sunday'])
+
+    data['dates'] = df_dates
+    data['counts'] = df_counts
+    data['ratings'] = df_ratings
+    data['mon'] = df_mon
+    data['tue'] = df_tue
+    data['wed'] = df_wed
+    data['thu'] = df_thu
+    data['fri'] = df_fri
+    data['sat'] = df_sat
+    data['sun'] = df_sun
+    data['percent'] = df_percent
+    data['helpful'] = df_help
+    data['asin'] = df_asin
+
+    #"Dates", "Counts", "Ratings", "Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday", "Percent", "Helpful"
+    #["dates", "counts", "ratings", "mon", "tue", "wed", "thu", "fri", "sat", "sun", "percent", "helpful", "asin"]
+    #print(data)
+    if asin:
+        save_meta_df(file_name, data, count)
+
+
+def date_day(in_date):
+    days=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+    dayNumber=in_date.weekday()
+    return days[dayNumber]
+
 def save_df(file_name, data, count):
-    df = pd.DataFrame(data, columns=['title', 'text', 'asin', 'rating', 'keywords'])
+    df = pd.DataFrame(
+        data, columns=['title', 'text', 'asin', 'rating', 'keywords'])
     if int(count) == 1:
         df.to_csv('./generated/{}.csv'.format(file_name))
     else:
         with open('./generated/{}.csv'.format(file_name), 'a') as f:
             df.to_csv(f, header=False)
 
+
+def save_meta_df(file_name, data, count):
+    df = pd.DataFrame([data])
+    if int(count) == 1:
+        df.to_csv('./generated/{}-meta.csv'.format(file_name))
+    else:
+        with open('./generated/{}-meta.csv'.format(file_name), 'a') as f:
+            df.to_csv(f, header=False)
 
 def get_offset():
     lcur, lconn = lconnect()
@@ -307,7 +433,7 @@ def reset():
 if __name__ == "__main__":
     # get_data(file_name='quick-test-2', limit=0, batch=100, is_reset=True) # limit 0 gets all
     #print(lex_sum('this is a test. this is another test. How many tests do I need? I dont know, just keep testing', 2))
-    sum_reviews(file_name='sum-redis-test', limit=500, is_reset=False)
+    sum_reviews(file_name='sum-stop-test', limit=500, is_reset=True)
     # db_test(10)
-    #set_count(9)
-    #print(int(get_count()))
+    # set_count(9)
+    # print(int(get_count()))
